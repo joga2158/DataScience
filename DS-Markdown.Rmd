@@ -1,0 +1,112 @@
+---
+title: "Shooting Data"
+author: "Josh Garvey"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Step 1: Obtaining Data
+First thing I will do is read in the shooting data from the web.
+```{r get_data, include=TRUE}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+shooting_data <- read_csv(url_in)
+```
+
+## Step 2: Tidy Up the data
+Now that I have data in the shooting_data variable I can work on tidying it up. I would like to look at 
+the amount of deaths/shooting/precinct. I left in victim and perpetrator sex and race in case I want to 
+start pulling those factors in as well
+```{r tidy_data, include=TRUE}
+sub_shoot = subset(shooting_data, select = -c(INCIDENT_KEY, 
+                                              OCCUR_DATE,
+                                              OCCUR_TIME, 
+                                              BORO, 
+                                              JURISDICTION_CODE, 
+                                              LOCATION_DESC, 
+                                              X_COORD_CD, 
+                                              Y_COORD_CD,
+                                              VIC_AGE_GROUP,
+                                              Latitude, 
+                                              Longitude, 
+                                              Lon_Lat
+                                              ))
+# columns removed
+sub_shoot
+# summary
+summary(sub_shoot)
+```
+There are some null points in the data set. I plan on throwing those data points out
+if they are part of an analysis.
+
+
+## Step 3: Visualize the Data and Analyze
+With the data parsed down I can start to explore different factors leading to 
+shooting deaths to try and find correlations. To start with I will select the
+columns for whether or not there was a death, and what precinct it occured in.
+```{r vis_data, include=TRUE}
+deaths = subset(sub_shoot, select = c(PRECINCT, STATISTICAL_MURDER_FLAG))
+summary(deaths)
+
+# Total shootings and percentage that are lethal (a baseline for the area)
+nLethal = sum(!deaths[2])
+Lethal = sum(deaths[2])
+total_shootings = Lethal + nLethal
+percent_lethal_total = (Lethal/total_shootings)*100
+
+# Group the data to be graphed
+deaths_by_precinct <- deaths %>%
+  group_by(PRECINCT) %>%
+  summarize(num_deaths = sum(STATISTICAL_MURDER_FLAG), 
+            shootings = sum(STATISTICAL_MURDER_FLAG)+sum(!STATISTICAL_MURDER_FLAG)) %>%
+  mutate(perc_lethal = (num_deaths / shootings) *100) %>%
+  ungroup()
+
+# Graph the lethal percentages by precinct
+deaths_by_precinct %>%
+  ggplot(aes(x = PRECINCT, y = perc_lethal)) +
+  geom_line(aes(color = "precinct lethality")) +
+  geom_point(aes(color = "precinct lethality")) +
+  geom_line(aes(y = percent_lethal_total, color = "city average")) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "Lethal Shootings By Precinct", y = "Percentage")
+
+# Graph number of shootings versus total shooting to see if there is a trigger happy precinct
+shootings_by_precinct <- deaths %>%
+  group_by(PRECINCT) %>%
+  summarize(num_shootings = sum(STATISTICAL_MURDER_FLAG)+sum(!STATISTICAL_MURDER_FLAG)) %>%
+  ungroup()
+
+shootings_by_precinct %>%
+  ggplot(aes(x = PRECINCT, y = num_shootings)) +
+  geom_line(aes(color = "shootings")) +
+  geom_point(aes(color = "shootings")) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "Shootings By Precinct", y = NULL)
+
+```
+
+## Step 4: Sources of Bias
+I think the biggest bias source is the fact that I chose to include factors like 
+race and sex into my analysis but left out age range, location, the date, etc. There
+are infinitely many factors that go into an officers decision to shoot and by 
+handpicking these ones to analyze I may be missing some huge correlation. An example
+could be that the rate of deaths by shooting goes way up in one location due to it
+being further from medical attention than another. 
+
+I could try to mitigate by picking a few columns for data to hopefully give me an idea
+when something is an outlier. This is going to be hard to pick arbitrarily. Alternatively,
+I can accept that there is bias in the study and append a synopsis of how I got
+my results to the report so others can decide if its worthy of their use.
+
+```{r session, include=FALSE}
+sessionInfo()
+```
